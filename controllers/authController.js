@@ -1,28 +1,38 @@
 const User = require('../models/userModel');
 const AppError = require('../utils/appError');
 const catchAsync = require('../utils/catchAsync');
+const { filterObj } = require('../utils/filterObject');
 const { signJwt, verifyJwt } = require('../utils/jwt');
 
-exports.signup = catchAsync(async (req, res, next) => {
-  const user = await User.create(req.body);
+const filterUserSignupObject = reqBody =>
+  filterObj(reqBody, 'name', 'email', 'mobileNumber', 'password', 'passwordConfirm');
 
+const createAndSendToken = (user, statusCode, res) => {
   const jwt = signJwt(user.id);
 
   // Remove unnecessary stuff for client
   user.password = undefined;
   user.__v = undefined;
 
-  res.status(201).json({
+  res.status(statusCode).json({
     status: 'success',
     jwt,
     data: {
       user,
     },
   });
+};
+
+exports.signup = catchAsync(async (req, res, next) => {
+  const userDetails = filterUserSignupObject(req.body);
+
+  const user = await User.create(userDetails);
+
+  createAndSendToken(user, 201, res);
 });
 
 exports.login = catchAsync(async (req, res, next) => {
-  const { email, countryCode, mobile, password } = req.body;
+  const { email, mobile, password } = req.body;
 
   if (!password || (!email && !mobile)) {
     return next(new AppError('Please provide all details', 401));
@@ -30,14 +40,8 @@ exports.login = catchAsync(async (req, res, next) => {
 
   let userSearchObj = {};
 
-  if (mobile && countryCode) {
-    userSearchObj = { countryCode, mobile };
-  } else if (email) {
-    console.log(email);
-    userSearchObj = { email };
-  }
-
-  if (Object.keys(userSearchObj).length === 0) return next(new AppError('Please provide all details', 401));
+  if (mobile) userSearchObj = { mobile };
+  else if (email) userSearchObj = { email };
 
   const user = await User.findOne({ ...userSearchObj }).select('+password');
 
@@ -45,17 +49,7 @@ exports.login = catchAsync(async (req, res, next) => {
     return next(new AppError('Incorrect details, please try again!', 401));
   }
 
-  user.password = undefined;
-
-  const jwt = signJwt(user.id);
-
-  res.status(200).json({
-    status: 'success',
-    jwt,
-    data: {
-      user,
-    },
-  });
+  createAndSendToken(user, 200, res);
 });
 
 exports.protect = catchAsync(async (req, res, next) => {
@@ -87,3 +81,13 @@ exports.protect = catchAsync(async (req, res, next) => {
   req.user = user;
   next();
 });
+
+exports.restrictTo = (...roles) => {
+  return (req, res, next) => {
+    if (!roles.includes(req.user.role)) {
+      return next(new AppError('You do not have permission to perform this action', 403));
+    }
+
+    next();
+  };
+};

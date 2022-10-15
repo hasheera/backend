@@ -9,7 +9,6 @@ const userSchema = new mongoose.Schema({
   },
   email: {
     type: String,
-    required: [true, 'Please tell us your email!'],
     unique: true,
     validate: {
       validator: email => validator.isEmail(email),
@@ -28,6 +27,7 @@ const userSchema = new mongoose.Schema({
   password: {
     type: String,
     required: [true, 'Please provide a password'],
+    select: false,
   },
   passwordConfirm: {
     type: String,
@@ -44,6 +44,19 @@ const userSchema = new mongoose.Schema({
     enum: ['user', 'doctor'],
     default: 'user',
   },
+  chats: {
+    type: mongoose.Schema.ObjectId,
+    ref: 'Chat',
+    select: false,
+  },
+  reports: {
+    type: mongoose.Schema.ObjectId,
+    ref: 'Report',
+    select: false,
+  },
+  currentProblems: {
+    type: [String],
+  },
   passwordChangedAt: Date,
 });
 
@@ -52,7 +65,7 @@ const userSchema = new mongoose.Schema({
 userSchema.methods.isInputPasswordCorrect = async (inputPassword, password) =>
   await bcrypt.compare(inputPassword, password);
 
-userSchema.changedPasswordAfterJwtIssued = function (jwtTimeStamp) {
+userSchema.methods.changedPasswordAfterJwtIssued = function (jwtTimeStamp) {
   if (this.passwordChangedAt) {
     const passwordChangedTimestamp = parseInt(this.passwordChangedAt.getTime() / 1000, 10);
 
